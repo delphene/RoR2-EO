@@ -1,72 +1,189 @@
-import sys
+import random
+import math
+from globals import *
 
-def fitness(individual):    # calculate the fitness of an individual
-    efficient = intron_remove(individual)   # get list of efficient instructions
-    if len(efficient) == 0:                 # if no efficient instructions
-        return sys.float_info.max           # fitness is max
-    fitness = 0                             # initialize fitness
-    errors = []                             # initialize list of squared errors
-    with open("trainingSamples.txt") as file:   # open training sample data
-        for line in file:                       # for each training sample
-            r1, r2, value = line.split("\t")    # set r1 as x1, r2 as x2 and value as the calculated value
-            try:
-                r1 = float(r1)          # convert r1 to float
-                r2 = float(r2)          # convert r2 to float
-                value = float(value)    # convert value to float
-            except ValueError:          # ValueError if values are not floats (this will skip the first line)
-                continue                # skip line
-            r0 = r1 # initialize r0 as x1 (r1)
-            r3 = r1 # initialize r3 as x1 (r1)
-            r4 = r1 # initialize r4 as x1 (r1)
-            r = {'r0':r0, 'r1':r1, 'r2':r2, 'r3':r3, 'r4':r4, '1':1, '2':2, '3':3, '4':4, '5':5}    # dictionary holds current values for access from instructions
-            for inst in efficient:              # for each efficient instruction
-                set = individual[inst][0]       # calculation variable is first value in instruction
-                var1 = individual[inst][1]      # first variable is second value in instruction
-                op = individual[inst][2]        # operand is third value in instruction
-                var2 = individual[inst][3]      # second variable is fourth value in instruction
-                if op == '+':                   # if the operation is +
-                    r[set] = r[var1] + r[var2]  # complete instruction
-                elif op == '-':                 # if the operation is -
-                    r[set] = r[var1] - r[var2]  # complete instruction
-                elif op == '*':                 # if the operation is *
-                    r[set] = r[var1] * r[var2]  # complete instruction
-                elif op == '%':                 # if the operation is %
-                    if r[var2] != 0:            # if not dividing by 0
-                        r[set] = r[var1] % r[var2]  # complete instruction
-                    else:
-                        r[set] = 0
+class Player():
+    def __init__(self, stats, values):
+        # STATS
+        # self.health = 90
+        # self.damage = 12
+        # self.regen = 1
+        # self.armor = 0
+        # self.speed = 7
+        
+        self.health = stats['health']
+        self.damage = stats['damage']
+        self.regen = stats['regen']
+        self.armor = stats['armor']
+        self.speed = stats['speed']
+
+        # OPTIMIZER
+        self.values = values
+
+        # FITNESS
+        self.fitness = -1
+    
+    def evaluate(self, individual, init_diff, total_stages):
+        '''
+        each individual will have tiers of items, though each set of stages the player will get a portion of the items from the respective teir
+        choices are made based on inherited properties (clear %, open chests, use shrine of combat)
+        '''
+        # stat copies
+        health = self.health
+        damage = self.damage
+        regen = self.regen
+        armor = self.armor
+        speed = self.speed
+        # initial difficulty changes
+        if init_diff == 'drizzle':
+            regen_mult = 1.5
+            self.armor += 70
+        elif init_diff == 'monsoon':
+            regen_mult = 0.6
+        # coeff values
+        diff_values = {'drizzle':1, 'rainstorm':2, 'monsoon':3}
+        time_factor = 0.0506 * diff_values[init_diff]
+        # initialize
+        stage = 1
+        time = 0
+        
+        # MAIN LOOP
+        while stage < total_stages+1:
+            # The only exception to this rule is the first stage, which always has a monster credit amount of 0.
+
+            # reset values
+            money = 0
+            activated_mountain_shrines = 0
+
+            # SET VALUES 
+            map = random.sample(STAGES[stage])[0]                               # choose map
+            stage_factor = 1.15**stage
+            coeff = (time * time_factor) * stage_factor                         # calculate coeff
+            enemy_level = 1 + (coeff)/0.33                                      # effect on enemy level
+            money_cost = coeff**1.25                                            # effect on money cost
+            # enemy_xp_reward = coeff * monster_value * reward_multiplier         # effect on enemy xp reward
+            # enemy_gold_reward = 2 * coeff * monster_value * reward_multiplier   # effect on enemy reward
+            shrine_director_credits = 100 * coeff                               # shrine of combat income coeff
+
+            # spawning interactables
+            interactables_credits = SCENE_DIRECTOR[map]['Interactables']
+            while interactables_credits > 0:
+                # choose and spawn interactable
+            # spawning monsters
+            monsters_credits = SCENE_DIRECTOR[map]['Monsters']
+            monsters = []
+            monster_num = 0
+            while monsters_credits >= 8 and monster_num < 40: # can never be elite or too cheap
+                monsters.append()
+                monster_num += 1
             
-            errors.append((value-r[set])**2)   # append the error squared
+            # maybe values on the equipment optimize time % per stage, 
 
-    fitness = sum(errors)   # fitness is sum of errors
-    return round(fitness,2) # return fitness
-
-def intron_remove(individual):  # find the effective instructions in an individual
-    # find the final time r0 (output regester) is set. the final instruction
-    cut = -1        # initialize cut point is -1
-    for i in range(len(individual)-1,-1,-1):    # for each instruction starting from the last
-        if individual[i][0] == "r0":            # if the instruction is setting r0 (the output regester)
-            cut = i # set the cut point to the current i
-            break   # stop checking
-    if cut == -1:   # if the cut point wasnt found
-        return []   # return empty list
-    
-    variables = {"r0","r3","r4"}    # variables
-    in_use = set()                  # variables that will be used in effective instructions
-    if individual[cut][1] in variables: # add the first value of the final instruction if it is a variable 
-        in_use.add(individual[cut][1])
-    if individual[cut][3] in variables: # add the second value of the final instruction if it is a variable 
-        in_use.add(individual[cut][3])
-    
-    efficient = [cut]   # add the final instruction to list of efficient instructions
-    for i in range(cut-1,-1,-1):                # loop throught instructions from the final instruction to the first
-        if individual[i][0] in in_use:          # if this register will be used in the future
-            efficient.append(i)                 # append the instruction index to efficient instructions
-            in_use.remove(individual[i][0])     # remove the set regester from in_use
-            if individual[i][1] in variables:   # if the first value is a variable
-                in_use.add(individual[i][1])    # add this to in_use (the value of this matters)
-            if individual[i][3] in variables:   # if the second value is a variable
-                in_use.add(individual[i][3])    # add this to in_use (the value of this matters)
+            # MAIN
+            fast_director_credits = 0
+            fast_director_spawn = 0.0
+            slow_director_credits = 0
+            slow_director_spawn = 0.0
+            completion_time = 0.0       # seconds
+            completion = 0.0            # percent
+            fast_monster = None         # choice of monster card
+            while completion <= self.values[stage]: # if the completion % chosen by the agent is reached
+                # Update values
+                coeff = (time * time_factor) * stage_factor # calculate coeff
+                fast_director_credits += 0.75 * (1 + 0.4*coeff) # * (player_count + 1)/2
+                slow_director_credits += 0.75 * (1 + 0.4*coeff) # * (player_count + 1)/2
+                enemy_level = 1 + (coeff)/0.33              # effect on enemy level
+                money_cost = coeff**1.25                    # effect on money cost
                 
-    efficient.reverse() # reverse the list
-    return efficient    # return the list
+                # Check the timer fast
+                if fast_director_spawn <= 0:
+                    # Check for overcrowding
+                    if monsters < 40:   # Success
+                        # Prepare a wave
+                        # if spawn card and no fail
+                            # prepare wave with that card
+                        # elif no card or fail
+                            # select spawn card         # how???
+                            fast_monster = random.sample(MONSTER_SPAWN_CARD)
+                            while fast_monster[0] == 'Champions':
+                                fast_monster = random.sample(MONSTER_SPAWN_CARD)
+                        # determine elite tier # the highest available tier that can be afforded
+                        # if chosen tier is above 0
+                            # pick random affix
+                        # fast_spawn_counter = 0
+                    else:               # Fail
+                        # Spawn
+                        if fast_spawn_counter < 6 and conditions and cost <= fast_director_credits and not (fast_director_credits < 6 * cost and max(ELITE_MULTIPLIERS) * cost < 72000):
+                            # Prepare the spawn
+                            if fast_director_credits >= min(ELITE_MULTIPLIERS) * cost:          # if the director can afford the lowest elite type
+                                if fast_director_credits >= max(ELITE_MULTIPLIERS) * cost:      # if the director can also afford the highest elite type then get a high elite
+                                    fast_director_credits -= max(ELITE_MULTIPLIERS) * cost                                                                      # spend credits
+                                    elite = random.sample(ELITE_MULTIPLIERS[min(ELITE_MULTIPLIERS)])                                                            # choose elite type
+                                    monsters.append(elite['Health'] * [MONSTERS[fast_monster]['Health'], elite['Damage'] * MONSTERS[fast_monster]['Damage'], reward, xpreward])   # add monster with elite multipliers
+                                else:                                                           # if the director can not afford the highest elite type then get a low elite
+                                    fast_director_credits -= min(ELITE_MULTIPLIERS) * cost                                                                      # spend credits
+                                    elite = random.sample(ELITE_MULTIPLIERS[min(ELITE_MULTIPLIERS)])                                                            # choose elite type
+                                    monsters.append(elite['Health'] * [MONSTERS[fast_monster]['Health'], elite['Damage'] * MONSTERS[fast_monster]['Damage'], reward, xpreward])   # add monster with elite multipliers
+                            else:                                                               # if the director can no afford the lowest elite type then get a normal monster
+                                # spawn normal
+                                fast_director_credits -= cost                                                           # spend credits
+                                monsters.append([MONSTERS[fast_monster]['Health'], MONSTERS[fast_monster]['Damage'], reward, xpreward])   # add monster
+                        # else: skip and no spend credits
+                    fast_director_spawn = random.uniform(completion_time+4.5,completion_time+9.0)   # choose new wave timer
+                
+
+
+                if slow_director_spawn <= 0:
+                    if monsters < 40:
+                        # spawn monster
+                    else:
+                        # prepare wave
+                    slow_director_spawn = random.uniform(completion_time+22.5,completion_time+30.0)
+
+                # spawn barrels and give completion% of gold to player
+                # cloaked_chest
+                # rusty_lockbox
+
+                # if the player dies end run
+                if health <= 0:
+                    break
+
+                completion_time += 0.5
+                fast_director_spawn -= 0.5
+                slow_director_spawn -= 0.5
+
+            # BOSS
+            boss_time = 0
+            teleporter_boss_director_credits = 600 * math.sqrt(coeff) * (1 + activated_mountain_shrines)
+            teleporter_director_credits = 0
+
+            # Whenever a Combat Director deactivates, it transfers 40% of its remaining credits to another random active Director and discards the rest.
+            if random.random() > 50:
+                teleporter_director_credits += 0.4 * fast_director_credits
+            else:
+                teleporter_boss_director_credits += 0.4 * fast_director_credits
+            if random.random() > 50:
+                teleporter_director_credits += 0.4 * slow_director_credits
+            else:
+                teleporter_boss_director_credits += 0.4 * slow_director_credits
+
+            # cant spawn stone golemns
+            if random.random() > 0.1:   # decrease health based on the number of "Armor-Piercing Rounds" the player has
+                #spawn horde
+            else:
+                #spawn boss
+
+            while boss_health > 0:
+                coeff = (time * time_factor) * stage_factor
+                teleporter_director_credits += 2 * (1 + 0.4*coeff) # * (player_count + 1)/2
+                # if the player dies end run
+                if health <= 0:
+                    break
+                time += boss_time
+
+            mobs = teleporter_director.mobs             # list of mobs during charging
+
+            # time += completion_time + boss_time + charge_time
+            stage += 1
+
+        return fitness
